@@ -35,8 +35,13 @@ def hash_password(password):
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed_password.decode('utf-8')
+@wakinjologin.route("/")
+def home():
+    return "Hello, John!"
+
 
 # Define the route that accepts a POST request for registration
+
 @wakinjologin.route('/register', methods=['POST'])
 def register_user():
     # Get 'worker_id', 'username', 'phone_number', 'password' and 'confirm_password' from form data
