@@ -5,7 +5,6 @@ from flask_cors import CORS  # Import CORS
 import bcrypt  # Import bcrypt for password hashing
 from dotenv import load_dotenv
 import os
-
 load_dotenv()
 # Your Flask app code here
 wakinjologin = Flask(__name__)  # Define the Flask app
@@ -17,7 +16,7 @@ def get_db_connection():
 
         # Establish connection using PyMySQL with utf8mb4 charset
         connection = pymysql.connect(
-            host=os.getenv("host"),
+        host=os.getenv("host"),
         user=os.getenv("user"),
         password=os.getenv("password"),
         database=os.getenv("database"),
@@ -629,4 +628,5 @@ def get_items():
 
 # Run the application
 if __name__ == '__main__':
-    wakinjologin.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 10000))  # Use Render's allowed port  
+    wakinjologin.run(host="0.0.0.0", port=port)  
