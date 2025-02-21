@@ -564,7 +564,7 @@ def get_employees():
             cursor = connection.cursor()
 
             # Retrieve all employees from the database
-            cursor.execute("SELECT worker_id, username, phone_number FROM employees")
+            cursor.execute("SELECT worker_id, username, phone_number FROM employees where id=12")
             employees = cursor.fetchall()
 
             # If no employees exist
