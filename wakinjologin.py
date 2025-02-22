@@ -414,7 +414,7 @@ def send_email(owner_email, item_name, company_name):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-@app.route('/update_inventory', methods=['POST'])
+@wakinjologin.route('/update_inventory', methods=['POST'])
 def update_inventory():
     items = request.json.get('items')  # Expecting list of items
 
