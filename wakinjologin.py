@@ -3,6 +3,11 @@ import pymysql
 from pymysql import Error
 from flask_cors import CORS  # Import CORS
 import bcrypt  # Import bcrypt for password hashing
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import mysql.connector
+from mysql.connector import Error
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -385,118 +390,102 @@ def admin_login_user():
         }), 500
 
 
-@wakinjologin.route('/update_inventory', methods=['POST'])
+# Function to send an email notification
+def send_email(owner_email, item_name, company_name):
+    sender_email = os.getenv("sender_email")
+    owner_email = os.getenv("receiver_email")
+    sender_password = os.getenv("sender_password") # Use environment variables instead in production
+    subject = "Low Stock Alert!"
+    body = f"Alert: The item '{item_name}' from '{company_name}' has only 5 units left in stock."
+
+    msg = MIMEMultipart()
+    msg["From"] = sender_email
+    msg["To"] = owner_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, owner_email, msg.as_string())
+        server.quit()
+        print(f"Low stock alert sent to {owner_email} for {item_name}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+@app.route('/update_inventory', methods=['POST'])
 def update_inventory():
-    # Get 'items' list from JSON payload
-    items = request.json.get('items')  # Expecting a list of dictionaries with 'item_name', 'quantity', 'company_name', and 'type'
-    
-    # Validate input data
+    items = request.json.get('items')  # Expecting list of items
+
     if not items or not isinstance(items, list):
-        return jsonify({
-            "status": "error",
-            "message": "Invalid input. Expecting a list of items."
-        }), 400
-    
+        return jsonify({"status": "error", "message": "Invalid input, expecting a list of items."}), 400
+
     connection = get_db_connection()
     if connection:
         try:
-            cursor = connection.cursor()
+            cursor = connection.cursor(dictionary=True)
             responses = []
-            
+
             for item in items:
                 item_name = item.get('item_name')
                 company_name = item.get('company_name')
                 quantity = item.get('quantity')
-                update_type = item.get('type')  # "add" or "subtract"
-                
+                update_type = item.get('type')
+
                 if not item_name or not company_name or not quantity or not update_type:
-                    responses.append({
-                        "item_name": item_name,
-                        "company_name": company_name,
-                        "status": "error",
-                        "message": "Missing item_name, company_name, quantity, or type"
-                    })
+                    responses.append({"item_name": item_name, "status": "error", "message": "Missing data"})
                     continue
-                
+
                 if not str(quantity).isdigit() or int(quantity) <= 0:
-                    responses.append({
-                        "item_name": item_name,
-                        "company_name": company_name,
-                        "status": "error",
-                        "message": "Quantity should be a positive integer"
-                    })
+                    responses.append({"item_name": item_name, "status": "error", "message": "Quantity should be a positive integer"})
                     continue
-                
+
                 quantity = int(quantity)
-                
-                # Check if the item exists in the database using item_name and company_name
-                cursor.execute("SELECT * FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
+
+                # Fetch item details
+                cursor.execute("SELECT quantity, owner_email FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
                 item_record = cursor.fetchone()
-                
+
                 if not item_record:
-                    responses.append({
-                        "item_name": item_name,
-                        "company_name": company_name,
-                        "status": "error",
-                        "message": f"Item '{item_name}' from company '{company_name}' does not exist in the database. Please register it first."
-                    })
+                    responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
                     continue
-                
+
                 current_quantity = item_record['quantity']
-                
+                owner_email = item_record.get('owner_email')
+
                 if update_type == 'add':
-                    cursor.execute(
-                        "UPDATE items SET quantity = quantity + %s WHERE item_name = %s AND company_name = %s",
-                        (quantity, item_name, company_name)
-                    )
+                    cursor.execute("UPDATE items SET quantity = quantity + %s WHERE item_name = %s AND company_name = %s", (quantity, item_name, company_name))
                     new_quantity = current_quantity + quantity
+
                 elif update_type == 'subtract':
                     if current_quantity < quantity:
-                        responses.append({
-                            "item_name": item_name,
-                            "company_name": company_name,
-                            "status": "error",
-                            "message": "Not enough stock to subtract"
-                        })
+                        responses.append({"item_name": item_name, "status": "error", "message": "Not enough stock"})
                         continue
-                    cursor.execute(
-                        "UPDATE items SET quantity = quantity - %s WHERE item_name = %s AND company_name = %s",
-                        (quantity, item_name, company_name)
-                    )
+                    
                     new_quantity = current_quantity - quantity
+                    cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
+
+                    # Send email alert if stock reaches 5
+                    if new_quantity == 5 and owner_email:
+                        send_email(owner_email, item_name, company_name)
+
                 else:
-                    responses.append({
-                        "item_name": item_name,
-                        "company_name": company_name,
-                        "status": "error",
-                        "message": "Invalid update type. Use 'add' or 'subtract'."
-                    })
+                    responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
                     continue
-                
-                responses.append({
-                    "item_name": item_name,
-                    "company_name": company_name,
-                    "status": "success",
-                    "message": f"Inventory updated successfully. New quantity: {new_quantity}"
-                })
-            
+
+                responses.append({"item_name": item_name, "status": "success", "message": f"Inventory updated. New quantity: {new_quantity}"})
+
             connection.commit()
             cursor.close()
             connection.close()
-            
             return jsonify({"updates": responses}), 200
-        
-        except Error as e:
-            return jsonify({
-                "status": "error",
-                "message": f"Error accessing database: {e}"
-            }), 500
-    else:
-        return jsonify({
-            "status": "error",
-            "message": "Database connection failed"
-        }), 500
 
+        except Error as e:
+            return jsonify({"status": "error", "message": f"Database error: {e}"}), 500
+
+    else:
+        return jsonify({"status": "error", "message": "Database connection failed"}), 500
 
 
 
