@@ -397,10 +397,45 @@ def update_inventory():
         if not connection:
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
 
-        # Now cursor uses DictCursor automatically
-        cursor = connection.cursor()
+        # Use DictCursor (make sure your get_db_connection() sets this)
+        cursor = connection.cursor()  # Assuming get_db_connection() uses DictCursor
         responses = []
+        missing_items = []
 
+        # --- Pre-check: Verify ALL items exist ---
+        for item in data['items']:
+            item_name = item.get('item_name')
+            company_name = item.get('company_name')
+            if not item_name or not company_name:
+                missing_items.append({
+                    "item_name": item_name,
+                    "company_name": company_name,
+                    "error": "Missing item_name or company_name"
+                })
+                continue
+
+            cursor.execute(
+                "SELECT quantity FROM items WHERE item_name = %s AND company_name = %s",
+                (item_name, company_name)
+            )
+            item_record = cursor.fetchone()
+            if not item_record:
+                missing_items.append({
+                    "item_name": item_name,
+                    "company_name": company_name,
+                    "error": "Item not found"
+                })
+
+        if missing_items:
+            cursor.close()
+            connection.close()
+            return jsonify({
+                "status": "error",
+                "message": "One or more items do not exist",
+                "details": missing_items
+            }), 404
+
+        # --- All items exist. Proceed with update ---
         for item in data['items']:
             item_name = item.get('item_name')
             company_name = item.get('company_name')
@@ -412,7 +447,6 @@ def update_inventory():
                 responses.append({"item_name": item_name, "status": "error", "message": "Missing data"})
                 continue
 
-            # Make sure quantity is a positive integer
             try:
                 quantity = int(quantity)
                 if quantity <= 0:
@@ -421,54 +455,40 @@ def update_inventory():
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid quantity"})
                 continue
 
-            # Fetch current quantity from DB
+            # Retrieve current quantity (we already confirmed the item exists)
             cursor.execute(
                 "SELECT quantity FROM items WHERE item_name = %s AND company_name = %s",
                 (item_name, company_name)
             )
             item_record = cursor.fetchone()
-
-            if not item_record:
-                # Item not found in DB
-                responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
-                continue
-
-            # Since we're using DictCursor, item_record is a dict
             current_quantity = item_record["quantity"]
 
-            # Handle add/subtract
+            # Update logic based on update_type
             if update_type == 'add':
                 new_quantity = current_quantity + quantity
                 cursor.execute(
                     "UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s",
                     (new_quantity, item_name, company_name)
                 )
-
             elif update_type == 'subtract':
                 if current_quantity < quantity:
                     responses.append({"item_name": item_name, "status": "error", "message": "Not enough stock"})
                     continue
-
                 new_quantity = current_quantity - quantity
                 cursor.execute(
                     "UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s",
                     (new_quantity, item_name, company_name)
                 )
-
             else:
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
                 continue
 
-
             responses.append({
                 "item_name": item_name,
-
-                "status": "Success",
-
-                "message": f"Inventory updated! New quantity: {new_quantity}"
+                "status": "✅ Success",
+                "message": f"🎉 Inventory updated! New quantity: {new_quantity}"
             })
 
-        # Commit and close
         connection.commit()
         cursor.close()
         connection.close()
@@ -476,12 +496,10 @@ def update_inventory():
         return jsonify({"updates": responses}), 200
 
     except Error as db_err:
-        # Catch PyMySQL errors
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Database error: {str(db_err)}"}), 500
 
     except Exception as e:
-        # Catch all other errors
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Server error: {str(e)}"}), 500
 
