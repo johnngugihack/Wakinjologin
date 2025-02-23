@@ -388,14 +388,17 @@ import traceback  # Add this to log errors
 def update_inventory():
     try:
         data = request.json
+        # Validate input structure
         if not data or 'items' not in data or not isinstance(data['items'], list):
             return jsonify({"status": "error", "message": "Invalid input, expecting a list of items."}), 400
 
+        # Get DB connection
         connection = get_db_connection()
         if not connection:
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
 
-        cursor = connection.cursor(dictionary=True)  # Ensure dictionary cursor
+        # Now cursor uses DictCursor automatically
+        cursor = connection.cursor()
         responses = []
 
         for item in data['items']:
@@ -404,53 +407,80 @@ def update_inventory():
             quantity = item.get('quantity')
             update_type = item.get('type')
 
+            # Basic validations
             if not all([item_name, company_name, quantity, update_type]):
                 responses.append({"item_name": item_name, "status": "error", "message": "Missing data"})
                 continue
 
-            if not isinstance(quantity, int) or quantity <= 0:
-                responses.append({"item_name": item_name, "status": "error", "message": "Quantity should be a positive integer"})
+            # Make sure quantity is a positive integer
+            try:
+                quantity = int(quantity)
+                if quantity <= 0:
+                    raise ValueError("Quantity must be a positive integer")
+            except (TypeError, ValueError):
+                responses.append({"item_name": item_name, "status": "error", "message": "Invalid quantity"})
                 continue
 
-            cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
+            # Fetch current quantity from DB
+            cursor.execute(
+                "SELECT quantity FROM items WHERE item_name = %s AND company_name = %s",
+                (item_name, company_name)
+            )
             item_record = cursor.fetchone()
 
             if not item_record:
+                # Item not found in DB
                 responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
                 continue
 
-            current_quantity = item_record["quantity"]  # Corrected access method
+            # Since we're using DictCursor, item_record is a dict
+            current_quantity = item_record["quantity"]
 
+            # Handle add/subtract
             if update_type == 'add':
                 new_quantity = current_quantity + quantity
-                cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
+                cursor.execute(
+                    "UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s",
+                    (new_quantity, item_name, company_name)
+                )
+
             elif update_type == 'subtract':
                 if current_quantity < quantity:
                     responses.append({"item_name": item_name, "status": "error", "message": "Not enough stock"})
                     continue
+
                 new_quantity = current_quantity - quantity
-                cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
+                cursor.execute(
+                    "UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s",
+                    (new_quantity, item_name, company_name)
+                )
+
             else:
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
                 continue
 
-            responses.append({"item_name": item_name, "status": "success", "message": f"Inventory updated. New quantity: {new_quantity}"})
+            responses.append({
+                "item_name": item_name,
+                "status": "success",
+                "message": f"Inventory updated. New quantity: {new_quantity}"
+            })
 
+        # Commit and close
         connection.commit()
         cursor.close()
         connection.close()
+
         return jsonify({"updates": responses}), 200
 
-    except Error as db_error:
-        traceback.print_exc()  # Logs full error traceback in the server logs
-        return jsonify({"status": "error", "message": f"Database error: {str(db_error)}"}), 500
+    except Error as db_err:
+        # Catch PyMySQL errors
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Database error: {str(db_err)}"}), 500
+
     except Exception as e:
+        # Catch all other errors
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Server error: {str(e)}"}), 500
-    finally:
-        if connection and connection.is_connected():
-            cursor.close()
-            connection.close()
 
 # Define the route that accepts a GET request to check if the username and password exist
 @wakinjologin.route('/check_user_exists', methods=['GET'])
