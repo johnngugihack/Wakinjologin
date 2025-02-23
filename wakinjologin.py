@@ -9,7 +9,7 @@ import os
 load_dotenv()
 # Your Flask app code here
 wakinjologin = Flask(__name__)
-CORS(wakinjologin, resources={r"/*": {"origins": "https://inventory-j107.onrender.com/"}})
+CORS(wakinjologin, resources={r"/*": {"origins": "https://inventory-j107.onrender.com"}})
 
 # MySQL connection details using PyMySQL
 def get_db_connection():
