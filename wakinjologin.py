@@ -383,6 +383,8 @@ def admin_login_user():
             "message": "Database connection failed"
         }), 500
 
+import traceback  # Add this to log errors
+
 @wakinjologin.route('/update_inventory', methods=['POST'])
 def update_inventory():
     try:
@@ -395,7 +397,6 @@ def update_inventory():
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
 
         cursor = connection.cursor()
-
         responses = []
 
         for item in data['items']:
@@ -412,7 +413,6 @@ def update_inventory():
                 responses.append({"item_name": item_name, "status": "error", "message": "Quantity should be a positive integer"})
                 continue
 
-            # Fetch item details
             cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
             item_record = cursor.fetchone()
 
@@ -420,20 +420,17 @@ def update_inventory():
                 responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
                 continue
 
-            current_quantity = item_record[0]
+            current_quantity = item_record[0]  # Use index-based access
 
             if update_type == 'add':
                 new_quantity = current_quantity + quantity
                 cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
-
             elif update_type == 'subtract':
                 if current_quantity < quantity:
                     responses.append({"item_name": item_name, "status": "error", "message": "Not enough stock"})
                     continue
-                
                 new_quantity = current_quantity - quantity
                 cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
-
             else:
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
                 continue
@@ -443,11 +440,10 @@ def update_inventory():
         connection.commit()
         cursor.close()
         connection.close()
-
         return jsonify({"updates": responses}), 200
 
     except Exception as e:
-        print(f"Error: {e}")  # Print the error in logs
+        traceback.print_exc()  # Print error for debugging
         return jsonify({"status": "error", "message": f"Server error: {str(e)}"}), 500
 
 
