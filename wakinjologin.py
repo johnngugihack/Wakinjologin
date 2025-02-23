@@ -395,7 +395,7 @@ def update_inventory():
         if not connection:
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
 
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)  # Ensure dictionary cursor
         responses = []
 
         for item in data['items']:
@@ -408,44 +408,28 @@ def update_inventory():
                 responses.append({"item_name": item_name, "status": "error", "message": "Missing data"})
                 continue
 
-            try:
-                quantity = int(quantity)  # Ensure quantity is an integer
-                if quantity <= 0:
-                    raise ValueError("Quantity must be a positive integer")
-            except (ValueError, TypeError):
-                responses.append({"item_name": item_name, "status": "error", "message": "Invalid quantity format"})
+            if not isinstance(quantity, int) or quantity <= 0:
+                responses.append({"item_name": item_name, "status": "error", "message": "Quantity should be a positive integer"})
                 continue
-		cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
-		item_record = cursor.fetchone()
-		
-		if not item_record:
-		    responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
-		    continue
-		
-		# Check if item_record is a dictionary or tuple
-		if isinstance(item_record, dict):  
-		    current_quantity = item_record.get('quantity')  # Use dictionary access
-		else:
-		    current_quantity = item_record[0]  # Use index-based access
-		
-		if current_quantity is None:
-		    responses.append({"item_name": item_name, "status": "error", "message": "Quantity data missing"})
-                    continue
 
-           
+            cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
+            item_record = cursor.fetchone()
+
+            if not item_record:
+                responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
+                continue
+
+            current_quantity = item_record["quantity"]  # Corrected access method
 
             if update_type == 'add':
                 new_quantity = current_quantity + quantity
-                cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", 
-                               (new_quantity, item_name, company_name))
-
+                cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
             elif update_type == 'subtract':
                 if current_quantity < quantity:
                     responses.append({"item_name": item_name, "status": "error", "message": "Not enough stock"})
                     continue
                 new_quantity = current_quantity - quantity
-                cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", 
-                               (new_quantity, item_name, company_name))
+                cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
             else:
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
                 continue
@@ -457,12 +441,16 @@ def update_inventory():
         connection.close()
         return jsonify({"updates": responses}), 200
 
+    except Error as db_error:
+        traceback.print_exc()  # Logs full error traceback in the server logs
+        return jsonify({"status": "error", "message": f"Database error: {str(db_error)}"}), 500
     except Exception as e:
-        traceback.print_exc()  # Print error for debugging
+        traceback.print_exc()
         return jsonify({"status": "error", "message": f"Server error: {str(e)}"}), 500
-
-
-
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
 # Define the route that accepts a GET request to check if the username and password exist
 @wakinjologin.route('/check_user_exists', methods=['GET'])
