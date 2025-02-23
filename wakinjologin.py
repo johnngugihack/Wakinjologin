@@ -431,7 +431,7 @@ def update_inventory():
             connection.close()
             return jsonify({
                 "status": "error",
-                "message": "One or more items do not exist",
+                "message": "Register this item first!",
                 "details": missing_items
             }), 404
 
