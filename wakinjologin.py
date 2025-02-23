@@ -394,7 +394,8 @@ def update_inventory():
         if not connection:
             return jsonify({"status": "error", "message": "Database connection failed"}), 500
 
-        cursor = connection.cursor(dictionary=True)
+        cursor = connection.cursor()
+
         responses = []
 
         for item in data['items']:
@@ -419,7 +420,7 @@ def update_inventory():
                 responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
                 continue
 
-            current_quantity = item_record['quantity']
+            current_quantity = item_record[0]
 
             if update_type == 'add':
                 new_quantity = current_quantity + quantity
