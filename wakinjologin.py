@@ -4,10 +4,6 @@ from pymysql import Error
 from flask_cors import CORS  # Import CORS
 import bcrypt  # Import bcrypt for password hashing
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import mysql.connector
-from mysql.connector import Error
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -105,8 +101,6 @@ def register_user():
             "message": "Database connection failed"
         }), 500
 
-from flask import jsonify, request
-from psycopg2 import connect, Error
 
 @wakinjologin.route('/delete_employee', methods=['POST'])
 def delete_employee():
