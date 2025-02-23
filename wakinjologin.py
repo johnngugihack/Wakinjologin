@@ -463,9 +463,9 @@ def update_inventory():
             responses.append({
                 "item_name": item_name,
 
-                "status": "✅ Success",
+                "status": "Success",
 
-                "message": f"🎉 Inventory updated! New quantity: {new_quantity}"
+                "message": f"Inventory updated! New quantity: {new_quantity}"
             })
 
         # Commit and close
