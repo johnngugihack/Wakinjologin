@@ -458,13 +458,13 @@ def update_inventory():
             else:
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
                 continue
+	   responses.append({
+	      "item_name": item_name,
+	      "status": "✅ Success",
+	      "message": f"🎉 Inventory updated! New quantity: {new_quantity}"
+	   })
 
-            responses.append({
-                "item_name": item_name,
-                "status": "success",
-                "message": f"Inventory updated. New quantity: {new_quantity}"
-            })
-
+           
         # Commit and close
         connection.commit()
         cursor.close()
