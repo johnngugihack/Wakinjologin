@@ -389,31 +389,6 @@ def admin_login_user():
             "message": "Database connection failed"
         }), 500
 
-
-# Function to send an email notification
-def send_email(owner_email, item_name, company_name):
-    sender_email = os.getenv("sender_email")
-    owner_email = os.getenv("receiver_email")
-    sender_password = os.getenv("sender_password") # Use environment variables instead in production
-    subject = "Low Stock Alert!"
-    body = f"Alert: The item '{item_name}' from '{company_name}' has only 5 units left in stock."
-
-    msg = MIMEMultipart()
-    msg["From"] = sender_email
-    msg["To"] = owner_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
-    try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, owner_email, msg.as_string())
-        server.quit()
-        print(f"Low stock alert sent to {owner_email} for {item_name}")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-
 @wakinjologin.route('/update_inventory', methods=['POST'])
 def update_inventory():
     items = request.json.get('items')  # Expecting list of items
@@ -444,7 +419,7 @@ def update_inventory():
                 quantity = int(quantity)
 
                 # Fetch item details
-                cursor.execute("SELECT quantity, owner_email FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
+                cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
                 item_record = cursor.fetchone()
 
                 if not item_record:
@@ -452,7 +427,6 @@ def update_inventory():
                     continue
 
                 current_quantity = item_record['quantity']
-                owner_email = item_record.get('owner_email')
 
                 if update_type == 'add':
                     cursor.execute("UPDATE items SET quantity = quantity + %s WHERE item_name = %s AND company_name = %s", (quantity, item_name, company_name))
@@ -465,10 +439,6 @@ def update_inventory():
                     
                     new_quantity = current_quantity - quantity
                     cursor.execute("UPDATE items SET quantity = %s WHERE item_name = %s AND company_name = %s", (new_quantity, item_name, company_name))
-
-                    # Send email alert if stock reaches 5
-                    if new_quantity == 5 and owner_email:
-                        send_email(owner_email, item_name, company_name)
 
                 else:
                     responses.append({"item_name": item_name, "status": "error", "message": "Invalid update type"})
@@ -486,7 +456,6 @@ def update_inventory():
 
     else:
         return jsonify({"status": "error", "message": "Database connection failed"}), 500
-
 
 
 # Define the route that accepts a GET request to check if the username and password exist
