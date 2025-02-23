@@ -415,15 +415,24 @@ def update_inventory():
             except (ValueError, TypeError):
                 responses.append({"item_name": item_name, "status": "error", "message": "Invalid quantity format"})
                 continue
+		cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
+		item_record = cursor.fetchone()
+		
+		if not item_record:
+		    responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
+		    continue
+		
+		# Check if item_record is a dictionary or tuple
+		if isinstance(item_record, dict):  
+		    current_quantity = item_record.get('quantity')  # Use dictionary access
+		else:
+		    current_quantity = item_record[0]  # Use index-based access
+		
+		if current_quantity is None:
+		    responses.append({"item_name": item_name, "status": "error", "message": "Quantity data missing"})
+                    continue
 
-            cursor.execute("SELECT quantity FROM items WHERE item_name = %s AND company_name = %s", (item_name, company_name))
-            item_record = cursor.fetchone()
-
-            if not item_record:
-                responses.append({"item_name": item_name, "status": "error", "message": "Item not found"})
-                continue
-
-            current_quantity = item_record[0]  # Fetch quantity properly
+           
 
             if update_type == 'add':
                 new_quantity = current_quantity + quantity
