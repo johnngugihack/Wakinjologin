@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 # Your Flask app code here
-wakinjologin = Flask(__name__)  # Define the Flask app
-CORS(wakinjologin)  # Enable CORS for all routes
+wakinjologin = Flask(__name__)
+CORS(wakinjologin, resources={r"/*": {"origins": "https://example.com"}})
 
 # MySQL connection details using PyMySQL
 def get_db_connection():
